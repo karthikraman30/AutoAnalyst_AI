@@ -23,24 +23,39 @@ def save_file_locally(file: UploadFile) -> str:
         
     return file_path, file_id
 
+def read_dataset(file_path: str):
+    """
+    Helper to read CSV/Excel with error handling for encodings.
+    Tries UTF-8 first, then Latin-1 (common for financial data), then CP1252.
+    """
+    if file_path.endswith('.csv'):
+        # Try default UTF-8 first
+        try:
+            return pd.read_csv(file_path)
+        except UnicodeDecodeError:
+            # Fallback to Latin-1 (common for Excel-generated CSVs)
+            try:
+                return pd.read_csv(file_path, encoding='latin1')
+            except UnicodeDecodeError:
+                # Last resort fallback
+                return pd.read_csv(file_path, encoding='cp1252')
+                
+    elif file_path.endswith(('.xls', '.xlsx')):
+        return pd.read_excel(file_path)
+    else:
+        raise ValueError("Unsupported file format")
+
 def load_and_preview_data(file_path: str, original_filename: str, content_type: str):
     """
-    Reads CSV/Excel, handles errors, and returns metadata.
+    Reads CSV/Excel using the robust reader and returns metadata.
     """
     try:
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-            content_type = content_type or 'text/csv'  # Ensure content_type is not None
-        elif file_path.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(file_path)
-            content_type = content_type or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        else:
-            raise ValueError("Unsupported file format")
+        # Use the helper function here so we don't crash on encoding errors
+        df = read_dataset(file_path)
 
-        # Basic Pre-computation for Phase 1
         preview = {
             "filename": original_filename,
-            "content_type": content_type or 'application/octet-stream',  # Fallback content type
+            "content_type": content_type or 'application/octet-stream',
             "shape": df.shape,
             "columns": list(df.columns),
             "dtypes": df.dtypes.astype(str).to_dict(),
@@ -51,5 +66,6 @@ def load_and_preview_data(file_path: str, original_filename: str, content_type: 
         return preview
 
     except Exception as e:
-        # In a real app, log this error
+        # Log this error to your terminal so you can see what went wrong
+        print(f"Error processing file: {e}") 
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")

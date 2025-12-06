@@ -5,3 +5,5 @@ python-multipart
 openpyxl
 matplotlib  # NEW
 seaborn     # NEW
+google-generativeai
+streamlit

@@ -1,40 +1,43 @@
-from fastapi import FastAPI, File, UploadFile
-from app.services import save_file_locally, load_and_preview_data
+from fastapi import FastAPI, File, UploadFile, HTTPException
+# Import necessary services and schemas
+from app.services import save_file_locally, load_and_preview_data, read_dataset
 from app.executor import session_executor
-from app.schemas import ResponseModel, CodeRequest, CodeResponse
-import pandas as pd # Needed to load data into the session
+from app.llm import generate_code_from_query
+from app.schemas import ResponseModel, CodeRequest, CodeResponse, ChatRequest, ChatResponse
 import os
+import uvicorn
 
 app = FastAPI(title="Data Scientist Assistant Backend")
 
+# Global dictionary to store metadata in memory
+# This acts as a simple "Brain Memory" so the LLM knows what columns exist.
+METADATA_STORE = {} 
+
 @app.post("/upload", response_model=ResponseModel)
 async def upload_dataset(file: UploadFile = File(...)):
-    # 1. Save the file
+    """
+    Handles file upload, reads it safely, and prepares the Python session.
+    """
     file_path, file_id = save_file_locally(file)
     
-    # 2. Process using Pandas
     try:
-        # Get content type from the uploaded file
-        content_type = file.content_type
+        # 1. Generate Preview (Metadata for the frontend/LLM)
+        preview_data = load_and_preview_data(file_path, file.filename, file.content_type)
         
-        # Load the data into a DataFrame
-        if file_path.endswith('.csv'):
-            df = pd.read_csv(file_path)
-            content_type = content_type or 'text/csv'
-        elif file_path.endswith(('.xls', '.xlsx')):
-            df = pd.read_excel(file_path)
-            content_type = content_type or 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-        else:
-            raise ValueError("Unsupported file format")
+        # 2. Load DataFrame into the Python Executor Session
+        # We use 'read_dataset' to handle encoding issues automatically
+        df = read_dataset(file_path)
+        session_executor.locals['df'] = df
         
-        # Store the DataFrame in the executor's globals
-        session_executor.globals['df'] = df
-        
-        # Generate preview data
-        preview_data = load_and_preview_data(file_path, file.filename, content_type)
+        # 3. Store Metadata for the LLM
+        # When you chat later, we look up this info using file_id
+        METADATA_STORE[file_id] = {
+            "columns": preview_data['columns'],
+            "summary": preview_data['summary_stats']
+        }
         
         return {
-            "message": "File uploaded and processed successfully",
+            "message": "File uploaded and loaded into Python session",
             "file_id": file_id,
             "preview": preview_data
         }
@@ -44,42 +47,58 @@ async def upload_dataset(file: UploadFile = File(...)):
             os.remove(file_path)
         raise e
 
-
-
-@app.post("/upload", response_model=ResponseModel)
-async def upload_dataset(file: UploadFile = File(...)):
-    file_path, file_id = save_file_locally(file)
-    
-    # Existing logic...
-    preview_data = load_and_preview_data(file_path, file.filename, file.content_type)
-
-    # --- NEW PHASE 2 LOGIC ---
-    # Automatically load the dataframe into the execution session as 'df'
-    # This enables the user to immediately write code like "print(df.head())"
-    if file_path.endswith('.csv'):
-        df = pd.read_csv(file_path)
-    elif file_path.endswith('.xlsx'):
-        df = pd.read_excel(file_path)
-    
-    session_executor.locals['df'] = df
-    # -------------------------
-    
-    return {
-        "message": "File uploaded and loaded into Python session", # Updated message
-        "file_id": file_id,
-        "preview": preview_data
-    }
-
 @app.post("/execute", response_model=CodeResponse)
 async def execute_python(request: CodeRequest):
     """
-    Executes Python code sent by the user (or LLM).
-    Has access to 'df' from the uploaded file.
+    Directly executes Python code.
+    Used by the LLM (or for testing purposes).
     """
     result = session_executor.execute_code(request.code)
     return result
 
+@app.post("/chat", response_model=ChatResponse)
+async def chat_with_data(request: ChatRequest):
+    """
+    The Intelligent Layer:
+    1. Receives user question (e.g., "Plot salary distribution")
+    2. Uses Gemini to write the Python code.
+    3. Executes the code.
+    4. Returns the result (text + image).
+    """
+    
+    # 1. Retrieve Metadata
+    if request.file_id not in METADATA_STORE:
+        raise HTTPException(status_code=404, detail="File metadata not found. Please upload file first.")
+        
+    metadata = METADATA_STORE[request.file_id]
+    
+    # 2. Get Python Code from Gemini
+    try:
+        generated_code = generate_code_from_query(
+            query=request.message,
+            columns=metadata['columns'],
+            summary=metadata['summary']
+        )
+    except Exception as e:
+         raise HTTPException(status_code=500, detail=f"LLM Error: {str(e)}")
+
+    # 3. Execute the Code
+    execution_result = session_executor.execute_code(generated_code)
+    
+    # 4. Handle Execution Errors (if the AI wrote bad code)
+    if execution_result['error']:
+        return {
+            "response_text": f"I tried to run the code, but ran into an error:\n{execution_result['error']}",
+            "generated_code": generated_code,
+            "image_output": None
+        }
+        
+    # 5. Return Success
+    return {
+        "response_text": execution_result['text_output'] or "Done! (Check the plot)",
+        "generated_code": generated_code,
+        "image_output": execution_result['image_output']
+    }
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

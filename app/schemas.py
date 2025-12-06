@@ -22,3 +22,12 @@ class CodeResponse(BaseModel):
     text_output: str
     image_output: Optional[str] = None # Base64 PNG string
     error: Optional[str] = None
+
+class ChatRequest(BaseModel):
+    message: str
+    file_id: str # We need to know WHICH file to analyze
+
+class ChatResponse(BaseModel):
+    response_text: str
+    generated_code: str
+    image_output: Optional[str] = None
