@@ -7,3 +7,4 @@ matplotlib  # NEW
 seaborn     # NEW
 google-generativeai
 streamlit
+python-dotenv

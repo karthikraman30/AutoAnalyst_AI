@@ -1,10 +1,16 @@
 import google.generativeai as genai
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 
-# Configure the API Key
-# BEST PRACTICE: Set this in your terminal: export GEMINI_API_KEY="your_key"
-# FOR NOW: You can paste it here to test.
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyCMA3N5cI5WLRbPh903lF_nYl8s7s-3PYI")
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(env_path)
+
+# Configure the API Key from environment variable
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+if not GEMINI_API_KEY:
+    raise ValueError("GEMINI_API_KEY environment variable is not set. Please set it before running the application.")
 
 try:
     genai.configure(api_key=GEMINI_API_KEY)
