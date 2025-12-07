@@ -2,123 +2,154 @@ import streamlit as st
 import requests
 import pandas as pd
 import json
-from io import BytesIO
 import base64
 
-# Configuration
+# --- Configuration ---
 BACKEND_URL = "http://127.0.0.1:8000"
+st.set_page_config(
+    page_title="AutoAnalyst AI",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-st.set_page_config(page_title="AI Data Scientist", layout="wide")
+# --- Custom CSS for "Pro" Look ---
+st.markdown("""
+    <style>
+    .stChatMessage {
+        border-radius: 10px;
+        padding: 10px;
+    }
+    .stButton button {
+        width: 100%;
+        border-radius: 5px;
+        height: 3em;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-st.title("🤖 AI Data Scientist Assistant")
-st.markdown("Upload a dataset and ask questions in plain English!")
-
-# Initialize Session State (to remember file_id and chat history)
+# --- Session State Initialization ---
 if "file_id" not in st.session_state:
     st.session_state.file_id = None
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "columns" not in st.session_state:
+    st.session_state.columns = []
 
-# --- Sidebar: File Upload ---
+# --- Helper: Send Message to Backend ---
+def send_message(prompt):
+    # 1. Add User Message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    
+    # 2. Call Backend
+    payload = {"message": prompt, "file_id": st.session_state.file_id}
+    
+    try:
+        response = requests.post(f"{BACKEND_URL}/chat", json=payload)
+        if response.status_code == 200:
+            data = response.json()
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": data['response_text'],
+                "image": data['image_output'],
+                "code": data['generated_code']
+            })
+        else:
+            st.error(f"Server Error: {response.text}")
+    except Exception as e:
+        st.error(f"Connection Failed: {e}")
+
+# ==========================================
+#              SIDEBAR DASHBOARD
+# ==========================================
 with st.sidebar:
-    st.header("📂 Data Upload")
-    uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
+    st.title("🤖 AutoAnalyst AI")
+    st.markdown("---")
+    
+    # 1. File Upload Section
+    uploaded_file = st.file_uploader("📂 Upload Dataset", type=["csv", "xlsx"])
 
     if uploaded_file and not st.session_state.file_id:
-        with st.spinner("Uploading & Analyzing..."):
-            # Prepare file for API
+        with st.spinner("🚀 Ingesting Data..."):
             files = {"file": (uploaded_file.name, uploaded_file, uploaded_file.type)}
             try:
                 response = requests.post(f"{BACKEND_URL}/upload", files=files)
-                
                 if response.status_code == 200:
                     data = response.json()
                     st.session_state.file_id = data['file_id']
-                    st.success("File Processed Successfully!")
+                    st.session_state.columns = data['preview']['columns']
                     
-                    # Show Preview
-                    st.subheader("📊 Dataset Preview")
-                    preview = data['preview']
-                    st.write(f"**Rows:** {preview['shape'][0]} | **Columns:** {preview['shape'][1]}")
-                    
-                    # Convert first_rows list to DataFrame for nice display
-                    st.dataframe(pd.DataFrame(preview['first_rows']))
-                    
-                    st.write("**Columns:**")
-                    st.json(preview['dtypes'])
-                else:
-                    st.error(f"Error: {response.text}")
+                    # Store preview for dashboard
+                    st.session_state.preview = data['preview']
+                    st.toast("File Uploaded Successfully!", icon="✅")
+                    st.rerun()
             except Exception as e:
-                st.error(f"Connection Failed: {e}")
+                st.error(f"Upload failed: {e}")
 
-    # Reset Button
+    # 2. Data Health Dashboard (Only shows if file is active)
     if st.session_state.file_id:
-        if st.button("Upload New File"):
-            st.session_state.file_id = None
-            st.session_state.messages = []
+        st.subheader("📊 Data Snapshot")
+        col1, col2 = st.columns(2)
+        rows = st.session_state.preview['shape'][0]
+        cols = st.session_state.preview['shape'][1]
+        col1.metric("Rows", rows)
+        col2.metric("Columns", cols)
+        
+        with st.expander("🔍 View Raw Data"):
+            st.dataframe(pd.DataFrame(st.session_state.preview['first_rows']))
+            st.write("Column Types:", st.session_state.preview['dtypes'])
+
+        st.markdown("---")
+
+        # 3. AutoML Toolkit (Quick Actions)
+        st.subheader("🛠️ AutoML Toolkit")
+        
+        # Action: Auto Clean
+        if st.button("🧹 Auto-Clean Data"):
+            send_message("Check the dataset for missing values or duplicates and clean it automatically.")
+            st.rerun()
+            
+        st.markdown("#### 🎯 Model Training")
+        # Action: Target Selection
+        target_col = st.selectbox("Select Target Column", st.session_state.columns)
+        
+        # Action: Train Model
+        if st.button("🤖 Train Best Model"):
+            if target_col:
+                send_message(f"Predict the column '{target_col}'. Auto-encode categorical variables first, then find the best model and show feature importance.")
+                st.rerun()
+        
+        st.markdown("---")
+        if st.button("🔄 Reset / New File"):
+            st.session_state.clear()
             st.rerun()
 
-# --- Main Chat Area ---
-if st.session_state.file_id:
-    # Display Chat History
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            if "image" in message and message["image"]:
-                # Decode and display image
-                image_data = base64.b64decode(message["image"])
-                st.image(image_data)
+# ==========================================
+#              MAIN CHAT INTERFACE
+# ==========================================
 
-    # Chat Input
-    if prompt := st.chat_input("Ask about your data (e.g., 'Plot histogram of Salary')"):
-        # 1. Add User Message to History
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
+st.subheader("💬 Data Scientist Assistant")
 
-        # 2. Call Backend API
-        with st.chat_message("assistant"):
-            with st.spinner("Thinking & Coding..."):
-                payload = {
-                    "message": prompt,
-                    "file_id": st.session_state.file_id
-                }
-                try:
-                    response = requests.post(f"{BACKEND_URL}/chat", json=payload)
-                    
-                    if response.status_code == 200:
-                        data = response.json()
-                        response_text = data['response_text']
-                        generated_code = data['generated_code']
-                        image_base64 = data['image_output']
-
-                        # Display Response
-                        st.markdown(response_text)
-                        
-                        # Display Image if available
-                        if image_base64:
-                            image_data = base64.b64decode(image_base64)
-                            st.image(image_data)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response_text,
-                                "image": image_base64
-                            })
-                        else:
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": response_text,
-                                "image": None
-                            })
-
-                        # Optional: Show the code it wrote (Expander)
-                        with st.expander("See Python Code"):
-                            st.code(generated_code, language='python')
-
-                    else:
-                        st.error(f"Error: {response.text}")
-                except Exception as e:
-                    st.error(f"Connection Error: {e}")
-
+if not st.session_state.file_id:
+    st.info("👈 Upload a dataset in the sidebar to activate the AI Agent.")
 else:
-    st.info("👈 Please upload a dataset in the sidebar to start chatting!")
+    # Display Chat History
+    for msg in st.session_state.messages:
+        avatar = "👤" if msg["role"] == "user" else "🤖"
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["content"])
+            
+            # Show Image if available
+            if "image" in msg and msg["image"]:
+                image_data = base64.b64decode(msg["image"])
+                st.image(image_data, caption="Generated Insight")
+            
+            # Show Code inside an expander (Keep UI clean)
+            if "code" in msg and msg["code"]:
+                with st.expander("See Python Code"):
+                    st.code(msg["code"], language="python")
+
+    # Chat Input Area
+    if prompt := st.chat_input("Ask a question... (e.g. 'Plot the distribution of Age')"):
+        send_message(prompt)
+        st.rerun()

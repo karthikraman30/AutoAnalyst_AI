@@ -1,0 +1,16 @@
+Group Member,Person,Age,Gender,Profession,Aware of Carbon Footprint,Phone Usage (hrs/day),Charges per Day,Charging Time
+Karthik,Person 1,20,Male,Student,Yes,5-6,1,Evening
+Karthik,Person 2,19,Male,Student,No,6-10,1,Random
+Karthik,Person 3,22,Male,Student,Yes,4-5,1,Night
+Karthik,Person 4,28,Male,Software Engineer,Yes,8-9,2-3,Random
+Karthik,Person 5,19,Male,Student,Yes,4-5,1,Night
+Raj,Person 1,19,Male,Student,Heard but unclear,7,2,Night & Morning
+Raj,Person 2,20,Female,Working Professional,Yes,8,1,Night
+Raj,Person 3,28,Male,IT Professional,Yes,9,2,Random
+Raj,Person 4,24,Female,It Professional,Yes,4-5,1,Night
+Raj,Person 5,19,Female,Student,No,6,2,Random
+Harshil,Person 1,20,Female,Student,No,7,1-2,Random
+Harshil,Person 2,20,Male,Student,Yes,7,3,Evening & Night
+Harshil,Person 3,19,Male,Student,Yes,6-8,1 (Overnight),Random
+Harshil,Person 4,30,Male,Gym Trainer,No,6-7,2,Night
+Harshil,Person 5,20,Male,Student,Yes,7,Many,Night

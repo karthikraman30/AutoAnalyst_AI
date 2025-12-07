@@ -8,3 +8,4 @@ seaborn     # NEW
 google-generativeai
 streamlit
 python-dotenv
+scikit-learn

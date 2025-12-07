@@ -25,18 +25,17 @@ except Exception as e:
     raise
 
 def generate_code_from_query(query: str, columns: list, summary: dict) -> str:
-    """
-    Sends the user's query + dataset metadata to Gemini 
-    and asks for Python code in return.
-    """
-    
-    # 1. Construct the "System Prompt"
-    # We teach Gemini its role and constraints here.
     prompt = f"""
     You are an expert Python Data Scientist Assistant.
     
     CONTEXT:
     The user has uploaded a dataset. It is ALREADY loaded into a pandas DataFrame named 'df'.
+    
+    AVAILABLE POWER TOOLS (Use these preferentially):
+    1. `issues = identify_issues(df)` -> Returns dictionary of missing values/duplicates.
+    2. `df, log = auto_clean(df)` -> Automatically fills missing values and drops duplicates.
+    3. `df, log = auto_encode(df)` -> Encodes text columns to numbers (REQUIRED before ML).
+    4. `results, msg = find_best_model(df, target_col='Price')` -> Trains models and returns a comparison table.
     
     DATASET METADATA:
     - Columns: {columns}
@@ -49,11 +48,14 @@ def generate_code_from_query(query: str, columns: list, summary: dict) -> str:
     Write Python code to answer the request.
     
     RULES:
-    1. Use 'df' directly. DO NOT reload the file.
-    2. If the user asks for a plot, use 'matplotlib.pyplot' or 'seaborn'.
-    3. If the user asks for a number/text, print() it.
-    4. RESPOND ONLY WITH CODE. No markdown, no explanations, no ```python``` wrappers.
-    5. Handle potential errors (like missing values) gracefully if possible.
+    1. Use 'df' directly.
+    2. If the user asks to "clean data", use `auto_clean`.
+    3. If the user asks to "predict [column]" or "run ML", you MUST:
+       a) Run `df, _ = auto_encode(df)`
+       b) Run `results, msg = find_best_model(df, target_col='...')`
+       c) Print the `results` and `msg`.
+    4. ALWAYS print the output variables so the user can see them.
+    5. RESPOND ONLY WITH CODE.
     """
 
     # 2. Call Gemini

@@ -5,15 +5,22 @@ import matplotlib
 import matplotlib.pyplot as plt
 import base64
 import traceback
+from app.automl import identify_issues, auto_clean, auto_encode, find_best_model
 
 # Set non-interactive backend to prevent plots from popping up on the server
 matplotlib.use('Agg') 
 
 class CodeExecutor:
     def __init__(self):
-        # This dictionary acts as the "memory" of the session.
-        # We initialize it with pandas so the code can always use 'pd'
-        self.globals = {"pd": pd, "plt": plt}
+        # We inject the tools into 'globals' so the LLM can call them directly
+        self.globals = {
+            "pd": pd, 
+            "plt": plt,
+            "identify_issues": identify_issues,
+            "auto_clean": auto_clean,
+            "auto_encode": auto_encode,
+            "find_best_model": find_best_model
+        }
         self.locals = {}
 
     def execute_code(self, code: str):
