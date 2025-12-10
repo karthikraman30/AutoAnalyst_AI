@@ -86,3 +86,42 @@ def generate_code_from_query(query: str, columns: list, summary: dict) -> str:
             print(f"Could not list models: {list_error}")
         print("======================\n")
         raise
+
+def analyze_dataset(columns: list, summary: dict, first_rows: list) -> str:
+    """
+    Analyzes the uploaded data and generates a 'Welcome Message' 
+    suggesting what the AutoAnalyst can do.
+    """
+    prompt = f"""
+    You are an expert Data Scientist Assistant named AutoAnalyst. 
+    A user just uploaded a new dataset. Analyze it and welcome them.
+    
+    DATASET METADATA:
+    - Columns: {columns}
+    - First 5 Rows: {first_rows}
+    - Summary Stats: {summary}
+    
+    YOUR GOAL:
+    Generate a friendly chat response that:
+    1. **Briefly explains** what this data looks like (e.g., "This looks like a customer churn dataset...").
+    2. **Suggests 3 concrete actions** the user can take using this project's capabilities (Plotting, Cleaning, or Machine Learning).
+    
+    FORMAT THE RESPONSE LIKE THIS:
+    "Hello! I've loaded your dataset. 📂 
+    
+    It appears to contain data about [Topic] with columns like {columns[:3]}...
+    
+    Here is what I can do for you:
+    1. 📊 **Visualize**: "Plot the distribution of [Column Name]"
+    2. 🧹 **Clean**: "Check for missing values and clean the data"
+    3. 🤖 **Predict**: "Train a model to predict [Target Column]"
+    
+    What would you like to start with?"
+    """
+    
+    try:
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"I've loaded your data, but I couldn't generate an analysis. Error: {e}"

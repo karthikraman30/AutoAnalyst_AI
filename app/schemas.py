@@ -14,6 +14,7 @@ class ResponseModel(BaseModel):
     message: str
     file_id: str # Useful for tracking the file in future steps
     preview: DatasetPreview
+    description: Optional[str] = None
 
 class CodeRequest(BaseModel):
     code: str
@@ -31,3 +32,4 @@ class ChatResponse(BaseModel):
     response_text: str
     generated_code: str
     image_output: Optional[str] = None
+

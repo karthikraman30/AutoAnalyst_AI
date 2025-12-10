@@ -81,6 +81,15 @@ with st.sidebar:
                     
                     # Store preview for dashboard
                     st.session_state.preview = data['preview']
+                    welcome_msg = data.get('description', "File uploaded successfully!")
+                    
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": welcome_msg,
+                        # No image/code for the welcome message
+                        "image": None,
+                        "code": None 
+                    })
                     st.toast("File Uploaded Successfully!", icon="✅")
                     st.rerun()
             except Exception as e:
@@ -94,6 +103,10 @@ with st.sidebar:
         cols = st.session_state.preview['shape'][1]
         col1.metric("Rows", rows)
         col2.metric("Columns", cols)
+
+        if "dataset_description" in st.session_state and st.session_state.dataset_description:
+            with st.expander("💡 AI Insights & Suggestions", expanded=True):
+                st.markdown(st.session_state.dataset_description)
         
         with st.expander("🔍 View Raw Data"):
             st.dataframe(pd.DataFrame(st.session_state.preview['first_rows']))

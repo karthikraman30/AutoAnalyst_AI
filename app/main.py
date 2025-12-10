@@ -2,7 +2,7 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 # Import necessary services and schemas
 from app.services import save_file_locally, load_and_preview_data, read_dataset
 from app.executor import session_executor
-from app.llm import generate_code_from_query
+from app.llm import generate_code_from_query, analyze_dataset
 from app.schemas import ResponseModel, CodeRequest, CodeResponse, ChatRequest, ChatResponse
 import os
 import uvicorn
@@ -15,34 +15,36 @@ METADATA_STORE = {}
 
 @app.post("/upload", response_model=ResponseModel)
 async def upload_dataset(file: UploadFile = File(...)):
-    """
-    Handles file upload, reads it safely, and prepares the Python session.
-    """
     file_path, file_id = save_file_locally(file)
     
     try:
-        # 1. Generate Preview (Metadata for the frontend/LLM)
+        # 1. Generate Metadata
         preview_data = load_and_preview_data(file_path, file.filename, file.content_type)
         
-        # 2. Load DataFrame into the Python Executor Session
-        # We use 'read_dataset' to handle encoding issues automatically
+        # 2. Load into Session
         df = read_dataset(file_path)
         session_executor.locals['df'] = df
         
-        # 3. Store Metadata for the LLM
-        # When you chat later, we look up this info using file_id
+        # 3. NEW: Generate the Chat Explanation
+        ai_welcome_message = analyze_dataset(
+            preview_data['columns'],
+            preview_data['summary_stats'],
+            preview_data['first_rows']
+        )
+        
+        # 4. Save Metadata
         METADATA_STORE[file_id] = {
             "columns": preview_data['columns'],
             "summary": preview_data['summary_stats']
         }
         
         return {
-            "message": "File uploaded and loaded into Python session",
+            "message": "File uploaded",
             "file_id": file_id,
-            "preview": preview_data
+            "preview": preview_data,
+            "description": ai_welcome_message # <--- Send it back
         }
     except Exception as e:
-        # Clean up if processing fails
         if os.path.exists(file_path):
             os.remove(file_path)
         raise e
